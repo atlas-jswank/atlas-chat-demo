@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (message !== '') {
             // Send message to server
             postMessage({ username, message })
-            addMessage(`${username}: ${message}`, 'me');
 
             // Clear input
             messageInput.value = '';
@@ -118,4 +117,17 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify(message)
         })
     }
+
+    // Connect to Socket.IO server
+    const socket = io();
+
+    // Subscribe to chat message events
+    socket.on('chat-message', (data) => {
+        if (data.username === username) {
+            addMessage(`${data.username}: ${data.message}`, 'me');
+        } else {
+            addMessage(`${data.username}: ${data.message}`, 'received');
+        }
+
+    });
 });
