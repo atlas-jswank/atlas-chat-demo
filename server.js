@@ -50,6 +50,32 @@ socket.on('disconnect', (socket) => {
     console.log('A user disconnected: ' + socket.id);
 });
 
+// Socket.IO connection handling
+socket.on('connection', (connection) => {
+    console.log('A user connected:', socket.id);
+
+    // Handle new user joining
+    connection.on('user-join', (username) => {
+        // Notify everyone about the new user
+        messages.push({ type: 'system', message: `${username} joined the chat` });
+        socket.emit('chat-message', { type: 'system', message: `${username} joined the chat` })
+    });
+
+    connection.on('user-left', (username) => {
+        messages.push({ type: 'system', message: `${username} left the chat` });
+        socket.emit('chat-message', { type: 'system', message: `${username} left the chat` })
+    });
+
+    // Handle typing indicator
+    connection.on('typing', (username) => {
+        connection.broadcast.emit('typing', username);
+    });
+
+    connection.on('stop-typing', (username) => {
+        connection.broadcast.emit('stop-typing', username);
+    });
+});
+
 // Start the server
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
