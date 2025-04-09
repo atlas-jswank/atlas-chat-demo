@@ -8,9 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
     const titleHeading = document.getElementById('title');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const typingUsername = document.getElementById('typing-username');
 
     // User state
     let username = window.sessionStorage.getItem("username") ?? '';
+    let typingTimeout = null;
+    let chatLoaded = false;
 
     // Handle user already logged in
     if (username !== '') {
@@ -21,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     joinBtn.addEventListener('click', () => {
         if (usernameInput.value.trim() !== '') {
             username = usernameInput.value.trim();
+            socket.emit('user-join', username);
             window.sessionStorage.setItem("username", username)
             showMessages();
             usernameInput.value = '';
@@ -42,6 +47,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') {
             sendMessage();
         }
+
+        // Handle typing indicator
+        if (!typingTimeout) {
+            socket.emit('typing', username);
+
+            typingTimeout = setTimeout(() => {
+                socket.emit('stop-typing', username);
+                typingTimeout = null;
+            }, 2000);
+        }
     });
 
     // Send chat message to server
@@ -50,10 +65,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (message !== '') {
             // Send message to server
             postMessage({ username, message })
-            addMessage(`${username}: ${message}`, 'me');
 
             // Clear input
             messageInput.value = '';
+        }
+
+        // Stop typing indicator
+        if (typingTimeout) {
+            clearTimeout(typingTimeout);
+            typingTimeout = null;
+            socket.emit('stop-typing');
         }
     }
 
@@ -65,6 +86,15 @@ document.addEventListener('DOMContentLoaded', () => {
         messagesContainer.appendChild(messageElement);
         scrollToBottom();
     }
+
+    function addSystemMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('system-message');
+        messageElement.textContent = message;
+        messagesContainer.appendChild(messageElement);
+        scrollToBottom();
+    }
+
 
     function scrollToBottom() {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -88,6 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
             chatBox.classList.add('hidden');
             usernameForm.classList.remove('hidden');
             titleHeading.replaceChildren("Real-Time Chat");
+            socket.emit('user-left', username);
+            chatLoaded = false;
         })
         return btn;
     }
@@ -98,13 +130,17 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(response => response.json())
             .then(messages => {
                 messages.forEach(message => {
-                    if (message.username === username) {
+                    if (message.type === 'system') {
+                        addSystemMessage(message.message);
+                    }
+                    else if (message.username === username) {
                         addMessage(`${message.username}: ${message.message}`, 'me');
                     } else {
                         addMessage(`${message.username}: ${message.message}`, 'received');
                     }
 
                 });
+                chatLoaded = true;
             })
     }
 
@@ -118,4 +154,32 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify(message)
         })
     }
+
+    // Connect to Socket.IO server
+    const socket = io();
+
+    // Subscribe to chat message events
+    socket.on('chat-message', (data) => {
+        if (!chatLoaded)
+            return;
+
+        if (data.type === 'system') {
+            addSystemMessage(data.message);
+        }
+        else if (data.username === username) {
+            addMessage(`${data.username}: ${data.message}`, 'me');
+        } else {
+            addMessage(`${data.username}: ${data.message}`, 'received');
+        }
+
+    });
+
+    socket.on('typing', (user) => {
+        typingUsername.textContent = user;
+        typingIndicator.classList.remove('hidden');
+    });
+
+    socket.on('stop-typing', () => {
+        typingIndicator.classList.add('hidden');
+    });
 });
